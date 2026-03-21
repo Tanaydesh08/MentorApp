@@ -1,7 +1,9 @@
 package com.tanaydeshmukh.mentor_platform.controller;
 
+import com.tanaydeshmukh.mentor_platform.dto.LoginRequest;
 import com.tanaydeshmukh.mentor_platform.dto.UserDTO;
 import com.tanaydeshmukh.mentor_platform.entity.User;
+import com.tanaydeshmukh.mentor_platform.repository.UserRepository;
 import com.tanaydeshmukh.mentor_platform.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +16,8 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+    @Autowired
+    private UserRepository userRepository;
 
     //create user
     @PostMapping
@@ -25,5 +29,18 @@ public class UserController {
     @GetMapping
     public List<UserDTO> getAllUsers(){
         return userService.getAllUsers();
+    }
+
+
+    // 🔐 Login API (ADD THIS)
+    @PostMapping("/login")
+    public String login(@RequestBody LoginRequest request) {
+        return userService.login(request.getEmail(), request.getPassword());
+    }
+
+    @PostMapping("/register")
+    public String register(@RequestBody User user) {
+        userRepository.save(user);
+        return "User registered successfully!";
     }
 }
