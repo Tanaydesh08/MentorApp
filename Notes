@@ -1,0 +1,38 @@
+Implemented JWT auth and fixed the security flow
+
+ Added user registration and login endpoints
+ Implemented JwtFilter for token validation
+ Configured role-based access using Spring Security
+ Fixed 401/403 issues caused by filter and security config
+ Resolved duplicate Authorization header bug from ARC
+ Fixed NonUniqueResultException by cleaning DB and adding unique email constraint
+ Improved request handling and debugging logs
+
+ webRTC - communicating through internet
+ this is a technology that allows browser apps to communicate directly.
+
+peer to peer connection. -> video calls and audio calls, file sharing and data transfer 
+it connects users directly (browser to browser)
+
+navigator.mediaDevices.getUserMedia(); // mic and camera 
+
+RTCPeerCommunication()
+capture media
+peer comunnication
+signaling server // for establishing webRTC project
+
+offer
+answer 
+ICE candidate -> 3 setps of signaling server
+Interactive Connectivity Establishment (ICE) is a framework used in WebRTC (Web Real-Time Communication) to enable web browsers to establish peer-to-peer audio, video, and data connections.
+
+example :- created invitation
+distributionof invitation
+acceptance of answer
+
+
+ICE Path -> safest and best path to establish that communication
+
+STUN Server : provides public IP Address and gives it to ICE candidate to establish communication. 
+
+TURN Server :  if communication is not establish, it will take msg from A and pass it to B act as middle man
