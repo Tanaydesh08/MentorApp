@@ -5,6 +5,7 @@ import com.tanaydeshmukh.mentor_platform.entity.User;
 import com.tanaydeshmukh.mentor_platform.repository.UserRepository;
 import com.tanaydeshmukh.mentor_platform.security.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -15,17 +16,24 @@ public class UserService {
 
     @Autowired
     private UserRepository userRepository;
+
     @Autowired
     private JwtUtil jwtUtil;
 
-    //create users
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    // ✅ REGISTER (with encryption)
     public UserDTO createUser(User user) {
+
+        user.setPassword(passwordEncoder.encode(user.getPassword())); // 🔐 IMPORTANT
+
         User savedUser = userRepository.save(user);
+
         return new UserDTO(savedUser.getEmail(), savedUser.getRole());
     }
 
-
-    //Get all users
+    // ✅ GET ALL USERS
     public List<UserDTO> getAllUsers() {
         return userRepository.findAll()
                 .stream()
@@ -33,13 +41,16 @@ public class UserService {
                 .collect(Collectors.toList());
     }
 
+    // ✅ LOGIN (FIXED)
     public String login(String email, String password) {
 
-        User user = userRepository.findAll()
-                .stream()
-                .filter(u -> u.getEmail().equals(email) && u.getPassword().equals(password))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Invalid credentials"));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // 🔐 compare encrypted password
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new RuntimeException("Invalid password");
+        }
 
         return jwtUtil.generateToken(user.getEmail());
     }
