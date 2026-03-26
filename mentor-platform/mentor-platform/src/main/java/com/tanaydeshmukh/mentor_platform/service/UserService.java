@@ -1,6 +1,9 @@
 package com.tanaydeshmukh.mentor_platform.service;
 
+import com.tanaydeshmukh.mentor_platform.dto.LoginRequestDTO;
+import com.tanaydeshmukh.mentor_platform.dto.RegisterRequestDTO;
 import com.tanaydeshmukh.mentor_platform.dto.UserDTO;
+import com.tanaydeshmukh.mentor_platform.dto.UserResponseDTO;
 import com.tanaydeshmukh.mentor_platform.entity.User;
 import com.tanaydeshmukh.mentor_platform.repository.UserRepository;
 import com.tanaydeshmukh.mentor_platform.security.JwtUtil;
@@ -24,34 +27,32 @@ public class UserService {
     private PasswordEncoder passwordEncoder;
 
     // ✅ REGISTER (with encryption)
-    public UserDTO createUser(User user) {
-
-        user.setPassword(passwordEncoder.encode(user.getPassword())); // 🔐 IMPORTANT
+    public UserResponseDTO register(RegisterRequestDTO request) {
+        User user = new User();
+        user.setEmail(request.getEmail());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole(request.getRole());
 
         User savedUser = userRepository.save(user);
-
-        return new UserDTO(savedUser.getEmail(), savedUser.getRole());
+        return new UserResponseDTO(savedUser.getEmail(), savedUser.getRole());
     }
 
     // ✅ GET ALL USERS
-    public List<UserDTO> getAllUsers() {
+    public List<UserResponseDTO> getAllUsers() {
         return userRepository.findAll()
                 .stream()
-                .map(user -> new UserDTO(user.getEmail(), user.getRole()))
-                .collect(Collectors.toList());
+                .map(user -> new UserResponseDTO(user.getEmail(), user.getRole()))
+                .toList();
     }
 
     // ✅ LOGIN (FIXED)
-    public String login(String email, String password) {
-
-        User user = userRepository.findByEmail(email)
+    public String login(LoginRequestDTO request) {
+        User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // 🔐 compare encrypted password
-        if (!passwordEncoder.matches(password, user.getPassword())) {
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new RuntimeException("Invalid password");
         }
-
         return jwtUtil.generateToken(user.getEmail());
     }
 }

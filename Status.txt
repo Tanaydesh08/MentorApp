@@ -1,0 +1,7 @@
+Spring Boot:   ██████████  (98% 🚀)
+Security/JWT:  ██████████  (100% 💯)
+SQL:           █████░░░░░  (50%)
+Angular:       ░░░░░░░░░░  (0%) ← NEXT
+Deployment:    ░░░░░░░░░░  (0%)
+Real-time:     ░░░░░░░░░░  (0%)
+Core Java:     ████░░░░░░  (35%)
