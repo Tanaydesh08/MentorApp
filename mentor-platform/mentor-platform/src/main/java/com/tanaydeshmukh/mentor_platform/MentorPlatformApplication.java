@@ -19,9 +19,6 @@ public class MentorPlatformApplication implements CommandLineRunner {
 
 	@Override
 	public void run(String... args) {
-//		User user = new User(null, "test@gmail.com", "1234", "STUDENT");
-//		userRepository.save(user);
-//
-		System.out.println("User saved!");
+		System.out.println("SERVER STARTED...!");
 	}
 }

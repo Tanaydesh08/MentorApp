@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+:root {
+  --background: #07111f;
+  --foreground: #ecf4ff;
+  --muted: #9ab0c9;
+  --panel: rgba(10, 21, 38, 0.72);
+  --panel-strong: rgba(14, 28, 48, 0.92);
+  --border: rgba(163, 191, 250, 0.16);
+  --brand: #7dd3fc;
+  --brand-strong: #38bdf8;
+  --accent: #f9a8d4;
+  --glow: rgba(56, 189, 248, 0.28);
+  --font-sans-stack:
+    "Aptos",
+    "Segoe UI",
+    "SF Pro Text",
+    "Helvetica Neue",
+    sans-serif;
+  --font-heading-stack:
+    "Arial Rounded MT Bold",
+    "Trebuchet MS",
+    "Avenir Next",
+    sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans-stack);
+  --font-heading: var(--font-heading-stack);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--foreground);
+  font-family: var(--font-sans-stack);
+  background:
+    radial-gradient(circle at top left, rgba(249, 168, 212, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(125, 211, 252, 0.22), transparent 26%),
+    linear-gradient(145deg, #07111f 10%, #0c1b31 42%, #07111f 100%);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(125, 211, 252, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 211, 252, 0.04) 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: radial-gradient(circle at center, black 45%, transparent 90%);
+}
+
+a,
+button,
+input,
+select {
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+button {
+  cursor: pointer;
+}
+
+input,
+select {
+  outline: none;
+}
+
+input::placeholder {
+  color: color-mix(in srgb, var(--muted) 85%, white 15%);
+}
+
+::selection {
+  background: rgba(125, 211, 252, 0.35);
+  color: white;
+}

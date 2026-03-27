@@ -1,7 +1,7 @@
-Spring Boot:   ██████████  (98% 🚀)
+Spring Boot:   ██████████  (100% ✅)
 Security/JWT:  ██████████  (100% 💯)
+Next.js:       ███████░░░  (70% 🚀)
 SQL:           █████░░░░░  (50%)
-Angular:       ░░░░░░░░░░  (0%) ← NEXT
-Deployment:    ░░░░░░░░░░  (0%)
 Real-time:     ░░░░░░░░░░  (0%)
+Deployment:    ░░░░░░░░░░  (0%)
 Core Java:     ████░░░░░░  (35%)
