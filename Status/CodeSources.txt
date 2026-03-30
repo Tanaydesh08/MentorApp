@@ -1,0 +1,120 @@
+CodeSources
+===========
+
+File purpose
+------------
+This file lists the main references used for the MentorSync project and what they directly influenced in the codebase.
+
+1. Internship PDFs
+------------------
+Files:
+- `?? 1-on-1 Mentor–Student Platform-Java.pdf`
+- `?? 1-on-1 Mentor–Student Platform-Java (1).pdf`
+- `?? 1-on-1 Mentor–Student Platform-Java (2).pdf`
+- `?? 1-on-1 Mentor–Student Platform-Java (3).pdf`
+- `?? 1-on-1 Mentor–Student Platform-Java (4).pdf`
+- `?? 1-on-1 Mentor–Student Platform-Java (5).pdf`
+
+What was taken from them:
+- project scope and feature selection
+- mentor/student role idea
+- private session workflow
+- session-based chat requirement
+- shared code editor requirement
+- WebRTC + WebSocket architecture direction
+- idea of language selection in the code editor
+- keeping the project industry-relevant but achievable
+
+What it influenced in the code:
+- `src/app/dashboard/page.tsx`
+- `src/app/session/[sessionId]/page.tsx`
+- backend websocket/signaling flow in the Spring project
+
+2. Notes file
+-------------
+File:
+- `Notes`
+
+What was taken from it:
+- `navigator.mediaDevices.getUserMedia()` as the correct browser API for local media capture
+- WebRTC needs signaling server support
+- offer, answer, and ICE candidate flow
+- STUN/TURN as connection helpers
+
+What it influenced in the code:
+- local camera/mic capture
+- `RTCPeerConnection` setup
+- session signaling messages over WebSocket
+- backend websocket room relay structure
+
+Main files influenced:
+- `src/app/session/[sessionId]/page.tsx`
+- backend websocket classes in the Spring project
+
+3. PNG layout reference
+-----------------------
+File:
+- `mentorApp.drawio.png`
+
+What was taken from it:
+- page structure for the session screen
+- left-side video area
+- top-right code editor area
+- bottom-right message area
+
+What it influenced in the code:
+- visual layout and panel structure of the session page
+
+Main file influenced:
+- `src/app/session/[sessionId]/page.tsx`
+
+4. Next.js local docs from node_modules
+---------------------------------------
+Source:
+- `node_modules/next/dist/docs/`
+
+What was taken from it:
+- App Router route structure guidance
+- dynamic route usage for `/session/[sessionId]`
+- compatibility with the installed Next.js version
+
+What it influenced in the code:
+- route creation and file placement
+- App Router-compatible session page setup
+
+Main files influenced:
+- `src/app/dashboard/page.tsx`
+- `src/app/session/[sessionId]/page.tsx`
+
+5. Existing project codebase
+----------------------------
+Source:
+- existing frontend repo code
+- existing backend Spring Boot repo code
+
+What was taken from it:
+- auth flow conventions already used in the project
+- JWT storage and parsing flow
+- Spring Boot security style already present in the backend
+- visual language already used in the frontend pages
+
+What it influenced in the code:
+- new code was kept consistent with the current repo structure instead of introducing a new architecture style
+
+Main files influenced:
+- `src/lib/auth.ts`
+- `src/lib/api.ts`
+- `src/app/dashboard/page.tsx`
+- `src/app/session/[sessionId]/page.tsx`
+- backend security and websocket files
+
+6. Codex usage
+--------------
+Codex was used for:
+- code optimization
+- code organization
+- integration help between frontend and backend pieces
+
+Note:
+- Core project direction, features, and implementation decisions were based on the PDFs, Notes file, PNG reference, and the existing codebase.
+- Codex should only be credited here for code optimization and implementation assistance.

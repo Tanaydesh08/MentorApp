@@ -19,18 +19,14 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-
         http
                 .cors(cors -> {})
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // ✅ allow POST login + register
                         .requestMatchers(HttpMethod.POST, "/api/users/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/users/register").permitAll()
-
-                        // 🔐 protected
-                        .requestMatchers("/api/users").hasAuthority("MENTOR")
-
+                        .requestMatchers("/ws/**").permitAll()
+                        .requestMatchers("/api/users").authenticated()
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form.disable())
@@ -39,8 +35,10 @@ public class SecurityConfig {
 
         return http.build();
     }
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 }
+

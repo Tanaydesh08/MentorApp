@@ -1,0 +1,147 @@
+Frontend Status Summary
+Date: 2026-03-30
+Project: MentorSync / 1-on-1 Mentor-Student Platform
+Status Folder: C:\Users\tanay\Desktop\Internship\Status
+Frontend Repo: C:\Users\tanay\Desktop\Internship\mentor-platform-frontend
+Backend Repo: C:\Users\tanay\Desktop\Internship\mentor-platform\mentor-platform
+
+Reviewed scope
+- PDFs in the Internship folder
+- Notes
+- mentorApp.drawio.png
+- current frontend codebase
+- current backend codebase
+
+Frontend currently implemented
+1. Routing and pages
+- `/`
+- `/login`
+- `/register`
+- `/dashboard`
+- `/session/[sessionId]`
+
+2. Auth flow
+- register and login UI exist
+- JWT token is stored in `localStorage`
+- protected frontend pages redirect to `/login` when token is missing
+- helper logic is centralized in `src/lib/auth.ts`
+
+3. Dashboard
+- `Create Session` generates a 6-character session id and routes to `/session/[sessionId]`
+- `Join Session` opens an existing session id in the same tab
+- dashboard loads `GET /api/users` for authenticated users
+- signed-in email and role are shown from the decoded token
+
+4. Session page layout
+- layout follows the `mentorApp.drawio.png` reference closely
+- left side: video/call area
+- right top: Monaco editor
+- right bottom: chat
+
+5. Realtime socket layer
+- frontend connects to `ws://localhost:8080/ws/session`
+- query params sent:
+  - `sessionId`
+  - `token`
+  - `clientId`
+- socket handles:
+  - presence
+  - system messages
+  - chat
+  - editor sync
+  - WebRTC signaling
+
+6. Chat
+- chat UI exists in the session page
+- sent messages are rendered immediately in the sender UI
+- same-tab websocket echoes are ignored to prevent duplicates
+
+7. Shared editor
+- Monaco editor integrated
+- JavaScript and Python selection available
+- code sync is room-based over websocket
+- sync model is simple last-write-wins broadcast
+
+8. Video/audio/screen share UI
+- local media starts with `getUserMedia`
+- mic toggle exists
+- camera toggle exists
+- screen sharing exists with `getDisplayMedia`
+- local preview and remote video area are both wired
+
+9. WebRTC signaling
+- `RTCPeerConnection` is set up in the session page
+- signaling messages exchanged through websocket:
+  - description offer/answer
+  - ICE candidates
+- negotiation ordering now uses a per-tab `clientId`, not just email
+
+10. Backend support already in place for frontend
+- websocket endpoint exists
+- websocket handshake validates token and session id
+- websocket presence and relay logic exists
+- `/api/users` is now authenticated, not mentor-only
+
+Frontend what is left
+1. Live call hardening
+- TURN server is not configured
+- call reconnect/retry flow is not implemented
+- production-grade renegotiation handling is still limited
+- remote call success still depends on live browser/network testing
+
+2. Editor upgrade
+- no cursor sync
+- no CRDT/Yjs or OT conflict handling
+- no run-code feature
+- no file tabs or persistence
+
+3. Chat polish
+- no persistent message history
+- no unread/read state
+- no attachments
+- no typing indicators
+
+4. Session product flow
+- no backend session creation API
+- no backend session join validation API
+- session ids are frontend-generated only
+- no persistent invitation/session state in the database
+
+5. Frontend auth hardening
+- no refresh token flow
+- no Next.js middleware-based protection
+- logout is local-token removal only
+
+6. UX polish
+- no loading skeletons for session route
+- no device-selection UI for mic/camera
+- no dedicated error recovery UI for failed socket/call states
+- no session history screen
+
+7. Frontend testing
+- no automated frontend tests are present
+- no end-to-end browser tests are present
+
+Backend-facing notes that affect frontend status
+- JWT currently stores email only, not role claims directly
+- role is looked up from DB during request filtering / websocket handshake
+- database model currently only supports users, not sessions/messages/invitations
+
+Verification completed during review
+- frontend structure reviewed fully
+- session page realtime logic reviewed fully
+- `npm run lint` passed earlier in the current state
+- `npm run build` passed earlier in the current state
+- backend compile passed earlier in the current state
+
+Overall frontend status
+- Core interview demo flow exists:
+  - auth
+  - dashboard
+  - users list
+  - create/join session
+  - meet-style room
+  - chat
+  - Monaco editor
+  - WebRTC signaling
+- Main remaining work is persistence, hardening, and production-readiness rather than first-pass UI wiring.

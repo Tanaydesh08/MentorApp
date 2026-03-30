@@ -8,6 +8,8 @@ Implemented JWT auth and fixed the security flow
  Fixed NonUniqueResultException by cleaning DB and adding unique email constraint
  Improved request handling and debugging logs
 
+ websocket
+
  webRTC - communicating through internet
  this is a technology that allows browser apps to communicate directly.
 
@@ -36,3 +38,9 @@ ICE Path -> safest and best path to establish that communication
 STUN Server : provides public IP Address and gives it to ICE candidate to establish communication. 
 
 TURN Server :  if communication is not establish, it will take msg from A and pass it to B act as middle man
+
+
+operational updates :- only6 changes that is occured is only changing 
+
+CRDT - Conflit free Replicated Datatypes
+

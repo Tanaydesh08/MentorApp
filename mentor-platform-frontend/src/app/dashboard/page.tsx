@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  clearStoredToken,
+  createSessionId,
+  isMentorRole,
+  readEmailFromToken,
+  readRoleFromToken,
+  useStoredToken,
+} from "@/lib/auth";
 import { getUsers, type UserResponse } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,40 +19,52 @@ const tasks = [
   "Upload the latest code snapshot for feedback",
 ];
 
-function readEmailFromToken(token: string) {
-  try {
-    const payload = token.split(".")[1];
-    if (!payload) {
-      return "";
-    }
-
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const decoded = atob(normalized);
-    const parsed = JSON.parse(decoded) as { sub?: string };
-    return parsed.sub ?? "";
-  } catch {
-    return "";
-  }
-}
-
 export default function DashboardPage() {
   const router = useRouter();
+  const token = useStoredToken();
   const [users, setUsers] = useState<UserResponse[]>([]);
-  const [currentEmail, setCurrentEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sessionInput, setSessionInput] = useState("");
+  const currentEmail = readEmailFromToken(token);
+  const currentRole = readRoleFromToken(token);
+  const showUsersApi = Boolean(token);
+  const mentorView = isMentorRole(currentRole);
+  const visibleUsers = users;
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
+  const createSession = () => {
+    router.push(`/session/${createSessionId()}`);
+  };
 
-    if (!token) {
-      router.push("/login");
+  const joinSession = () => {
+    const sessionId = sessionInput.trim().toLowerCase();
+
+    if (!sessionId) {
       return;
     }
 
-    setCurrentEmail(readEmailFromToken(token));
+    router.push(`/session/${sessionId}`);
+  };
+
+  useEffect(() => {
+    if (!token) {
+      router.push("/login");
+      setUsers([]);
+      setError("");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!showUsersApi) {
+      setUsers([]);
+      setError("");
+      setIsLoading(false);
+      return;
+    }
 
     const loadUsers = async () => {
+      setIsLoading(true);
+
       try {
         const response = await getUsers(token);
         setUsers(response);
@@ -62,7 +82,7 @@ export default function DashboardPage() {
     };
 
     void loadUsers();
-  }, [router]);
+  }, [router, showUsersApi, token]);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-7xl px-6 py-10 sm:px-10 lg:px-12">
@@ -83,6 +103,13 @@ export default function DashboardPage() {
               {currentEmail ? (
                 <p className="mt-3 text-sm text-sky-100/75">
                   Signed in as <span className="font-semibold text-white">{currentEmail}</span>
+                  {currentRole ? (
+                    <>
+                      {" "}
+                      <span className="text-sky-100/45">|</span>{" "}
+                      <span className="font-semibold text-sky-100">{currentRole}</span>
+                    </>
+                  ) : null}
                 </p>
               ) : null}
             </div>
@@ -97,7 +124,7 @@ export default function DashboardPage() {
             </Link>
             <button
               onClick={() => {
-                localStorage.removeItem("token");
+                clearStoredToken();
                 router.push("/login");
               }}
               className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 hover:-translate-y-0.5 hover:bg-sky-100"
@@ -109,16 +136,54 @@ export default function DashboardPage() {
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="rounded-[30px] border border-white/10 bg-slate-950/45 p-6">
+            <div className="mb-6 rounded-[28px] border border-sky-300/15 bg-sky-300/8 p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p className="text-sm text-sky-100">Session management</p>
+                  <h2 className="mt-2 font-[var(--font-space-grotesk)] text-3xl font-semibold text-white">
+                    Create or join a live room
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-7 text-sky-100/70">
+                    Create a fresh session id for a new mentoring room, or jump into an existing session using a shared code.
+                  </p>
+                </div>
+
+                <button
+                  onClick={createSession}
+                  className="px-4 py-2 bg-blue-600 text-white rounded"
+                >
+                  Create Session
+                </button>
+              </div>
+
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                <input
+                  value={sessionInput}
+                  onChange={(event) => setSessionInput(event.target.value)}
+                  placeholder="Enter session id, for example abc123"
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3 text-white focus:border-sky-300/50 focus:bg-white/8 focus:shadow-[0_0_0_4px_rgba(56,189,248,0.12)]"
+                />
+                <button
+                  onClick={joinSession}
+                  className="rounded-2xl border border-white/10 bg-white px-5 py-3 text-sm font-semibold text-slate-950 hover:-translate-y-0.5 hover:bg-sky-100"
+                >
+                  Join Session
+                </button>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm text-sky-100/65">Users from API</p>
                 <h2 className="mt-2 font-[var(--font-space-grotesk)] text-3xl font-semibold text-white">
-                  Spring Boot user list
+                  {mentorView ? "Users available for mentoring" : "Users in the platform"}
                 </h2>
               </div>
-              <span className="rounded-full border border-sky-300/25 bg-sky-300/10 px-3 py-1 text-xs font-medium text-sky-100">
-                GET /api/users
-              </span>
+              {token ? (
+                <span className="rounded-full border border-sky-300/25 bg-sky-300/10 px-3 py-1 text-xs font-medium text-sky-100">
+                  GET /api/users
+                </span>
+              ) : null}
             </div>
 
             <div className="mt-6">
@@ -128,25 +193,27 @@ export default function DashboardPage() {
                 </div>
               ) : null}
 
-              {!isLoading && error ? (
+              {!isLoading && showUsersApi && error ? (
                 <div className="rounded-3xl border border-amber-300/20 bg-amber-400/10 p-5 text-sm leading-7 text-amber-50">
                   {error}
                   <div className="mt-3 text-amber-100/80">
-                    Your backend security currently allows only <span className="font-semibold">MENTOR</span> to access this endpoint.
+                    The frontend is calling the users endpoint with the saved JWT. If this stays visible, the backend security rule still needs to allow authenticated users.
                   </div>
                 </div>
               ) : null}
 
-              {!isLoading && !error ? (
+              {!isLoading && showUsersApi && !error ? (
                 <div className="space-y-3">
-                  {users.map((user) => (
+                  {visibleUsers.map((user) => (
                     <div
                       key={user.email}
                       className="flex items-center justify-between rounded-3xl border border-white/8 bg-white/5 px-5 py-4"
                     >
                       <div>
                         <p className="text-base font-semibold text-white">{user.email}</p>
-                        <p className="text-sm text-[var(--muted)]">User account from Spring Boot</p>
+                        <p className="text-sm text-[var(--muted)]">
+                          {mentorView ? "Invite-ready platform user" : "Authenticated platform user"}
+                        </p>
                       </div>
                       <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-200">
                         {user.role}
@@ -162,11 +229,11 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-sm text-sky-100">API status</p>
                   <p className="text-sm text-sky-100/70">
-                    The dashboard reads the token from local storage and sends it as a Bearer token.
+                    The dashboard reads the token from local storage and sends it as a Bearer token for every logged-in user.
                   </p>
                 </div>
                 <span className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950">
-                  {users.length} users loaded
+                  {showUsersApi ? `${visibleUsers.length} users loaded` : "Login required"}
                 </span>
               </div>
             </div>
@@ -186,6 +253,24 @@ export default function DashboardPage() {
                   <p className="text-sm leading-7 text-sky-50/90">{task}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-6 rounded-[28px] border border-white/10 bg-slate-950/35 p-5">
+              <p className="text-sm text-sky-100/65">Workspace rollout</p>
+              <div className="mt-4 space-y-3">
+                {[
+                  "Session route added at /session/[sessionId]",
+                  "Invite link flow works through session ids",
+                  "Session workspace now uses a Meet-style layout with working local media controls",
+                ].map((item) => (
+                  <div
+                    key={item}
+                    className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-sm text-sky-50/90"
+                  >
+                    {item}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

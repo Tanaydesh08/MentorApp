@@ -1,0 +1,26 @@
+Project Status Board
+Date: 2026-03-30
+Folder: C:\Users\tanay\Desktop\Internship\Status
+
+Spring Boot      █████████░ 90% 🚀
+Security/JWT     ████████░░ 80% 🔐
+Next.js          █████████░ 90% ⚡
+SQL              ████░░░░░░ 40% 🗄️
+Real-time        ███████░░░ 70% 🔄
+Deployment       ░░░░░░░░░░ 0% 🌐
+Core Java        ███████░░░ 70% ☕
+
+
+Current summary
+- Frontend core flow is present and demoable.
+- Backend auth/users/websocket flow is present.
+- Realtime room exists but still needs live-network hardening.
+- Database work is still narrow and mostly limited to users.
+
+Most important unfinished items
+- persistent sessions
+- persistent messages
+- invitation/session database model
+- TURN server and call hardening
+- frontend auth hardening
+- deployment

@@ -31,32 +31,26 @@ public class JwtFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        System.out.println("JWT FILTER HIT");
-
         String path = request.getRequestURI();
 
-        if (path.startsWith("/api/users/login") || path.startsWith("/api/users/register")) {
+        if (path.startsWith("/api/users/login")
+                || path.startsWith("/api/users/register")
+                || path.startsWith("/ws/")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         String authHeader = request.getHeader("Authorization");
-        System.out.println("Auth Header: " + authHeader);
 
-        // ❌ No token
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            System.out.println("No token or invalid header");
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
 
-        // ✅ Extract token (safe handling if duplicate headers happen)
         String token = authHeader.split(",")[0].substring(7);
 
         try {
             String email = jwtUtil.extractEmail(token);
-            System.out.println("Extracted Email: " + email);
-
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -64,15 +58,11 @@ public class JwtFilter extends OncePerRequestFilter {
                     new UsernamePasswordAuthenticationToken(
                             user,
                             null,
-                            Collections.singletonList(
-                                    new SimpleGrantedAuthority(user.getRole())
-                            )
+                            Collections.singletonList(new SimpleGrantedAuthority(user.getRole()))
                     );
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
-
         } catch (Exception e) {
-            e.printStackTrace();
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }

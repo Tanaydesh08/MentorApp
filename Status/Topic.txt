@@ -1,0 +1,119 @@
+MentorSync Topics
+================
+
+Project summary
+---------------
+This project is a 1-on-1 mentor-student platform built with:
+- Next.js frontend
+- Spring Boot backend
+- Oracle database
+- WebSocket for realtime transport
+- WebRTC for browser-to-browser media
+
+Current implemented flow
+------------------------
+1. Authentication
+- Users can register as `STUDENT` or `MENTOR`.
+- Login returns a JWT token.
+- Frontend stores the token and uses it for protected pages.
+
+2. Dashboard
+- Dashboard reads the token and shows the signed-in email and role.
+- Dashboard can call `GET /api/users` for authenticated users.
+- User can create a session or join an existing one.
+
+3. Session room
+- Session route is `/session/[sessionId]`.
+- Layout follows the `mentorApp.drawio.png` reference.
+- Left side is for call/video.
+- Right top is Monaco editor.
+- Right bottom is chat.
+
+4. Realtime architecture
+- WebSocket is used as the signaling and room transport layer.
+- Message categories handled in the session room:
+  - presence
+  - chat
+  - editor sync
+  - system messages
+  - WebRTC signaling
+
+5. WebRTC architecture
+- Local camera and microphone use `navigator.mediaDevices.getUserMedia()`.
+- Screen sharing uses `navigator.mediaDevices.getDisplayMedia()`.
+- Browser-to-browser connection uses `RTCPeerConnection`.
+- Offer, answer, and ICE candidates are exchanged through the websocket channel.
+
+Important code concepts to explain in interview
+-----------------------------------------------
+1. Why `clientId` was introduced
+- Email identifies the logged-in user, but not a specific browser tab.
+- WebRTC and realtime sync need a unique client identity per active browser peer.
+- `clientId` fixes issues where same-user tabs or repeated test flows confuse signaling or message filtering.
+
+2. Why websocket is needed even when WebRTC exists
+- WebRTC handles peer-to-peer media after connection is established.
+- WebSocket is still needed first for signaling.
+- The app uses WebSocket to exchange offer, answer, and ICE candidate data.
+
+3. Why Monaco was chosen
+- Monaco gives an interview-strong code editor UI quickly.
+- It is enough for a shared code room without overbuilding the project.
+- Current sync is broadcast-based and intentionally simpler than CRDT.
+
+4. Why the editor sync is still simple
+- Last-write-wins websocket sync is enough for demo scope.
+- CRDT/Yjs would be better for production, but it is more complex than current project needs.
+
+5. Why remote video can still be environment-sensitive
+- WebRTC depends on permissions, browser compatibility, ICE negotiation, and network conditions.
+- Without TURN, some networks will still fail even if the code is correct.
+
+Current backend/database reality
+--------------------------------
+1. Database model currently implemented
+- Only `users` table/entity is present.
+- There are no `sessions`, `messages`, `invites`, or editor-snapshot tables yet.
+
+2. Security design
+- Login/register are public.
+- Other routes are authenticated.
+- `/api/users` now requires authentication.
+- WebSocket handshake validates token before room join.
+
+3. Startup fix added
+- `JacksonConfig.java` was added to expose an `ObjectMapper` bean.
+- This was required because the websocket handler depends on `ObjectMapper`.
+
+What is left to explain honestly in interview
+---------------------------------------------
+1. Frontend remaining
+- no persistent session model
+- no message history persistence
+- no advanced collaborative editor engine
+- no route middleware/auth refresh flow
+- no end-to-end tests
+
+2. Realtime remaining
+- no TURN server
+- no advanced reconnect/retry handling
+- no production-grade multi-peer support
+
+3. Database remaining
+- no session table
+- no message table
+- no invitation table
+- no session history table
+
+Best short explanation of project maturity
+------------------------------------------
+This project already demonstrates the full core flow for a mentorship platform demo:
+- auth
+- user listing
+- create/join room
+- meet-style session layout
+- realtime chat
+- shared editor
+- WebRTC signaling and media controls
+
+The main unfinished areas are persistence, advanced realtime hardening, and database expansion.
