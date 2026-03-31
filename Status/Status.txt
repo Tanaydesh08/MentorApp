@@ -4,13 +4,12 @@ Project: MentorSync / 1-on-1 Mentor-Student Platform
 Workspace: C:\Users\tanay\Desktop\Internship
 
 Overall status
-Spring Boot:   █████████░░  (90% 🚀)
-Security/JWT:  ████████░░░  (80% 🔐)
+Spring Boot:   ███████████  (100% 🚀)
+Security/JWT:  ██████████░  (95% 🔐)
 Next.js:       █████████░░  (90% 💻)
 Real-time:     ███████░░░░  (75% ⚡)
-SQL:           ████░░░░░░  (40% 🗄️)
-Deployment:    ██░░░░░░░░  (20% 🌐)
-Core Java:     ████░░░░░░  (35%)
+SQL:           ██████░░░░░  (40% 🗄️)
+Deployment:    ███░░░░░░░░  (20% 🌐)
 
 What is working now
 - Users can register as `STUDENT` or `MENTOR`.
