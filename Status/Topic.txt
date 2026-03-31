@@ -1,119 +1,441 @@
-MentorSync Topics
-================
+MentorSync Project Guide
+=======================
 
-Project summary
----------------
-This project is a 1-on-1 mentor-student platform built with:
-- Next.js frontend
-- Spring Boot backend
-- Oracle database
-- WebSocket for realtime transport
-- WebRTC for browser-to-browser media
+Date: 2026-03-31
 
-Current implemented flow
-------------------------
-1. Authentication
-- Users can register as `STUDENT` or `MENTOR`.
-- Login returns a JWT token.
-- Frontend stores the token and uses it for protected pages.
+1. What this project does
+-------------------------
+This project is a 1-on-1 mentor-student collaboration platform.
 
-2. Dashboard
-- Dashboard reads the token and shows the signed-in email and role.
-- Dashboard can call `GET /api/users` for authenticated users.
-- User can create a session or join an existing one.
+Current demo flow:
+- user registers or logs in
+- frontend stores the JWT token
+- dashboard loads platform users from the backend
+- user creates or joins a session route
+- session room opens with:
+  - video/audio area
+  - shared Monaco editor
+  - realtime chat
+- websocket carries room events and WebRTC signaling
+- WebRTC carries the browser-to-browser media stream
 
-3. Session room
-- Session route is `/session/[sessionId]`.
-- Layout follows the `mentorApp.drawio.png` reference.
-- Left side is for call/video.
-- Right top is Monaco editor.
-- Right bottom is chat.
-
-4. Realtime architecture
-- WebSocket is used as the signaling and room transport layer.
-- Message categories handled in the session room:
+2. Tech stack and responsibilities
+----------------------------------
+- Next.js frontend:
+  - pages
+  - UI
+  - local token storage
+  - editor
+  - browser media
+  - WebRTC peer connection
+- Spring Boot backend:
+  - register/login API
+  - JWT validation
+  - user lookup
+  - websocket handshake validation
+  - room message relay
+- Oracle database:
+  - stores users only in the current version
+- WebSocket:
+  - realtime chat
   - presence
+  - editor sync
+  - WebRTC signaling transport
+- WebRTC:
+  - direct browser-to-browser audio/video after signaling succeeds
+
+3. Folder map
+-------------
+- `mentor-platform-frontend/`
+  - Next.js frontend app
+- `mentor-platform/mentor-platform/`
+  - Spring Boot backend app
+- `Status/`
+  - project notes, status docs, and explanation files
+- `mentor-db.sql`
+  - manual SQL scratch file, not a real migration system
+
+4. End-to-end flow in simple order
+----------------------------------
+1. Register
+- Frontend sends email, password, and role to `POST /api/users/register`.
+- Backend hashes the password and saves the new `User`.
+
+2. Login
+- Frontend sends credentials to `POST /api/users/login`.
+- Backend checks the password and returns a JWT token.
+- Frontend saves the token in `localStorage`.
+
+3. Dashboard
+- Frontend reads the saved token.
+- It calls `GET /api/users` with `Authorization: Bearer <token>`.
+- Backend validates the token with `JwtFilter`.
+- Backend returns all users as response DTOs.
+
+4. Join session
+- Dashboard routes to `/session/[sessionId]`.
+- Session page opens a websocket connection to `/ws/session`.
+- Query params include:
+  - `sessionId`
+  - `token`
+  - `clientId`
+
+5. Realtime room
+- Backend websocket handshake validates the token and room info.
+- Backend stores each socket inside a room map.
+- Frontend sends and receives:
+  - `presence`
+  - `chat`
+  - `editor`
+  - `system`
+  - `signal`
+
+6. WebRTC call
+- Frontend asks browser permission for camera/microphone.
+- Frontend creates an `RTCPeerConnection`.
+- Offer, answer, and ICE candidates are sent through websocket `signal` messages.
+- After negotiation succeeds, media flows peer-to-peer through WebRTC.
+
+5. Backend file-by-file explanation
+-----------------------------------
+`mentor-platform/src/main/java/com/tanaydeshmukh/mentor_platform/MentorPlatformApplication.java`
+- Spring Boot entry point.
+- Starts the backend server.
+- Also prints a startup message through `CommandLineRunner`.
+
+`mentor-platform/src/main/resources/application.properties`
+- Sets the app name and backend port (`8080`).
+- Configures Oracle DB connection.
+- Enables Hibernate schema auto-update and SQL logging.
+
+`config/CorsConfig.java`
+- Allows the frontend origin `http://localhost:3000`.
+- Lets the browser call the backend during local development.
+
+`config/SecurityConfig.java`
+- Defines which routes are public and which require authentication.
+- `POST /api/users/login` and `POST /api/users/register` are public.
+- `/ws/**` is allowed through Spring Security because websocket auth is handled in the handshake interceptor.
+- `/api/users` requires an authenticated request.
+- Registers the `JwtFilter`.
+
+`config/JacksonConfig.java`
+- Exposes an `ObjectMapper` bean.
+- The websocket handler uses it to parse and write JSON messages.
+
+`controller/UserController.java`
+- REST controller for `/api/users`.
+- `GET /api/users` returns all users.
+- `POST /api/users/login` returns a JWT string.
+- `POST /api/users/register` creates a user and returns a safe response DTO.
+
+`service/UserService.java`
+- Holds the main user business logic.
+- `register(...)` builds a `User`, hashes the password, and saves it.
+- `getAllUsers()` maps entities into response DTOs.
+- `login(...)` checks email/password and asks `JwtUtil` to generate a token.
+
+`repository/UserRepository.java`
+- JPA repository for the `User` entity.
+- Adds `findByEmail(...)` on top of standard CRUD methods.
+
+`entity/User.java`
+- JPA entity mapped to the `users` table.
+- Stores:
+  - `id`
+  - `email`
+  - `password`
+  - `role`
+
+`dto/LoginRequestDTO.java`
+- Request body for login.
+- Carries `email` and `password`.
+
+`dto/RegisterRequestDTO.java`
+- Request body for register.
+- Carries `email`, `password`, and `role`.
+
+`dto/UserResponseDTO.java`
+- Safe response body returned to the frontend.
+- Exposes `email` and `role`, not the password.
+
+`dto/UserDTO.java`
+- General-purpose user DTO class.
+- It exists in the repo, but the current controller flow mainly uses `UserResponseDTO`.
+
+`dto/LoginRequest.java`
+- Older duplicate login DTO.
+- Present in the repo but not used by the current controller/service flow.
+
+`security/JwtUtil.java`
+- Creates and reads JWT tokens.
+- Current token only stores the email as the JWT subject.
+- Important detail:
+  - the token does not currently embed role claims
+  - role is looked up from the database on the backend when needed
+
+`security/JwtFilter.java`
+- Runs on protected HTTP requests.
+- Reads the `Authorization` header.
+- Extracts the token, gets the email from JWT, loads the user from DB, and sets the Spring Security context.
+- This is what protects `GET /api/users`.
+
+`websocket/WebSocketConfig.java`
+- Registers the websocket endpoint at `/ws/session`.
+- Connects the websocket handler and handshake interceptor.
+
+`websocket/SessionHandshakeInterceptor.java`
+- Runs before the websocket connection is accepted.
+- Reads `token`, `sessionId`, and `clientId` from query params.
+- Rejects the websocket if any are missing or invalid.
+- If valid, it stores:
+  - `email`
+  - `role`
+  - `sessionId`
+  - `clientId`
+  inside the websocket session attributes.
+
+`websocket/SessionWebSocketHandler.java`
+- Core realtime backend class.
+- Keeps an in-memory `rooms` map:
+  - key = `sessionId`
+  - value = set of websocket sessions in that room
+- On connect:
+  - adds the client to the room
+  - sends presence
+  - broadcasts a join system message
+- On incoming message:
+  - parses JSON
+  - rebuilds the outgoing message with trusted server-side sender data
+  - relays `signal` messages only to other clients
+  - broadcasts normal room messages to everyone in the room
+- On disconnect:
+  - removes the client
+  - updates presence
+  - broadcasts a leave system message
+
+6. Frontend file-by-file explanation
+------------------------------------
+`src/app/layout.tsx`
+- Root layout for the Next.js app.
+- Wraps every page with the same HTML/body shell.
+
+`src/app/globals.css`
+- Global styling and theme variables.
+- Controls the overall look of the site.
+
+`src/app/page.tsx`
+- Landing page.
+- Sends users to register or login.
+
+`src/app/register/page.tsx`
+- Register form UI.
+- Calls `registerUser(...)`.
+- Redirects to login after successful register.
+
+`src/app/login/page.tsx`
+- Login form UI.
+- Calls `loginUser(...)`.
+- Saves the returned token to `localStorage`.
+- Redirects to dashboard after login.
+
+`src/app/dashboard/page.tsx`
+- Main protected dashboard page.
+- Reads the stored token.
+- Redirects to `/login` if no token exists.
+- Calls `getUsers(token)` to show users from the backend.
+- Generates a session id for a new room or joins an existing room id.
+
+`src/lib/api.ts`
+- Central place for frontend REST calls.
+- Contains:
+  - `registerUser(...)`
+  - `loginUser(...)`
+  - `getUsers(...)`
+- Also normalizes backend error responses into readable frontend errors.
+
+`src/lib/auth.ts`
+- Helper file for token and auth-related client logic.
+- Contains:
+  - JWT payload decoding
+  - `readEmailFromToken(...)`
+  - `readRoleFromToken(...)`
+  - `getStoredToken()`
+  - `clearStoredToken()`
+  - `createSessionId()`
+- Important detail:
+  - `readRoleFromToken(...)` is ready for role claims
+  - the current backend JWT only includes email, so current role may be blank on the frontend
+
+`src/app/session/[sessionId]/page.tsx`
+- The most important file in the frontend.
+- It is the live collaboration room.
+- This one file currently handles:
+  - websocket connection
+  - presence updates
   - chat
   - editor sync
-  - system messages
+  - local media
+  - remote media
   - WebRTC signaling
+  - session page layout
 
-5. WebRTC architecture
-- Local camera and microphone use `navigator.mediaDevices.getUserMedia()`.
-- Screen sharing uses `navigator.mediaDevices.getDisplayMedia()`.
-- Browser-to-browser connection uses `RTCPeerConnection`.
-- Offer, answer, and ICE candidates are exchanged through the websocket channel.
+7. Session page broken into understandable parts
+------------------------------------------------
+1. Types and starter data
+- Defines message shapes like `SocketMessage`, `ChatMessage`, and `Participant`.
+- Defines starter code snippets for JavaScript and Python.
 
-Important code concepts to explain in interview
------------------------------------------------
-1. Why `clientId` was introduced
-- Email identifies the logged-in user, but not a specific browser tab.
-- WebRTC and realtime sync need a unique client identity per active browser peer.
-- `clientId` fixes issues where same-user tabs or repeated test flows confuse signaling or message filtering.
+2. Small helper functions
+- `stopTracks(...)`
+  - stops media tracks cleanly
+- `attachStreamToVideo(...)`
+  - attaches a media stream to a video element
+- `normalizeParticipants(...)`
+  - removes invalid or duplicate participants
+- `isPresenceSystemMessage(...)`
+  - filters duplicate join/leave text in chat
+- `createWebSocketUrl(...)`
+  - builds the websocket URL for the room
 
-2. Why websocket is needed even when WebRTC exists
-- WebRTC handles peer-to-peer media after connection is established.
-- WebSocket is still needed first for signaling.
-- The app uses WebSocket to exchange offer, answer, and ICE candidate data.
+3. Refs and state
+- `socketRef`
+  - stores the active websocket
+- `clientIdRef`
+  - unique id for this browser tab
+- `localStreamRef`, `remoteStreamRef`, `screenStreamRef`
+  - hold media streams
+- `peerConnectionRef`
+  - stores the active `RTCPeerConnection`
+- many `useState(...)` values
+  - socket status
+  - media status
+  - participant list
+  - mic/camera state
+  - editor language/code
+  - chat messages
 
-3. Why Monaco was chosen
-- Monaco gives an interview-strong code editor UI quickly.
-- It is enough for a shared code room without overbuilding the project.
-- Current sync is broadcast-based and intentionally simpler than CRDT.
+4. `sendSocketMessage(...)`
+- Central send function for websocket events.
+- Adds sender identity, role, client id, and timestamp before sending.
 
-4. Why the editor sync is still simple
-- Last-write-wins websocket sync is enough for demo scope.
-- CRDT/Yjs would be better for production, but it is more complex than current project needs.
+5. `resetPeerConnection(...)`
+- Clears remote stream state.
+- Closes the current peer connection.
+- Resets WebRTC negotiation flags.
 
-5. Why remote video can still be environment-sensitive
-- WebRTC depends on permissions, browser compatibility, ICE negotiation, and network conditions.
-- Without TURN, some networks will still fail even if the code is correct.
+6. `ensurePeerConnection(...)`
+- Creates the peer connection if it does not already exist.
+- Wires:
+  - ICE candidate sending
+  - remote track handling
+  - connection state changes
+  - negotiation-needed handling
+- Also adds current local media tracks into the connection.
 
-Current backend/database reality
---------------------------------
-1. Database model currently implemented
-- Only `users` table/entity is present.
-- There are no `sessions`, `messages`, `invites`, or editor-snapshot tables yet.
+7. `startMedia(...)`
+- Calls `navigator.mediaDevices.getUserMedia(...)`.
+- Saves local camera/mic stream.
+- Shows local preview in the UI.
+- Pushes local tracks into the peer connection.
 
-2. Security design
-- Login/register are public.
-- Other routes are authenticated.
-- `/api/users` now requires authentication.
-- WebSocket handshake validates token before room join.
+8. `handleSignalPayload(...)`
+- Processes incoming signaling data from websocket.
+- Applies:
+  - remote offers
+  - remote answers
+  - ICE candidates
+- Handles offer collisions using polite/impolite peer logic.
 
-3. Startup fix added
-- `JacksonConfig.java` was added to expose an `ObjectMapper` bean.
-- This was required because the websocket handler depends on `ObjectMapper`.
+9. `toggleTrack(...)`
+- Mutes/unmutes audio or video without destroying the whole stream.
 
-What is left to explain honestly in interview
----------------------------------------------
-1. Frontend remaining
-- no persistent session model
-- no message history persistence
-- no advanced collaborative editor engine
-- no route middleware/auth refresh flow
-- no end-to-end tests
+10. `toggleScreenShare(...)`
+- Starts screen sharing with `getDisplayMedia(...)`.
+- Replaces the outgoing video track in the peer connection.
+- Restores the camera track when sharing ends.
 
-2. Realtime remaining
+11. Chat helpers
+- `sendChatMessage()`
+  - sends normal room chat
+- `sendCodeSnippet()`
+  - sends current editor code into chat as text
+
+12. `handleSocketMessage(...)`
+- Central incoming websocket dispatcher.
+- Handles:
+  - `presence`
+    - updates participant list
+    - creates join/leave system messages
+  - `signal`
+    - passes offer/answer/candidate data to WebRTC logic
+  - `editor`
+    - applies remote code/language updates
+  - `chat` and `system`
+    - appends visible messages into chat
+
+13. Effects
+- websocket connect/disconnect effect
+- outgoing editor broadcast effect
+- auto-start-media effect when second participant joins
+- initial WebRTC offer effect
+- cleanup effect on unmount
+
+14. JSX layout
+- left side:
+  - remote video
+  - local preview
+  - media control buttons
+- right top:
+  - Monaco editor
+  - language switcher
+- right bottom:
+  - realtime chat list
+  - chat input
+
+8. Important design decisions to explain in interview
+-----------------------------------------------------
+Why both WebSocket and WebRTC are used
+- WebRTC does not magically connect peers by itself.
+- A signaling channel is needed first.
+- This project uses WebSocket as that signaling and room-transport channel.
+
+Why `clientId` exists
+- Email identifies the account, but not a specific browser tab.
+- Two tabs from the same email would confuse signaling if only email were used.
+- `clientId` gives each browser tab its own peer identity.
+
+Why the editor sync is simple
+- Current editor sync is websocket broadcast plus last-write-wins behavior.
+- That is enough for a project demo.
+- CRDT/Yjs/OT would be stronger for production, but more complex.
+
+Why role can look incomplete on the frontend
+- The frontend helper can read role claims from JWT if present.
+- The current backend token only stores the email subject.
+- Backend still knows the user role because it loads the user from the database.
+
+9. What is not implemented yet
+------------------------------
+- no persistent `sessions` table
+- no persistent `messages` table
+- no invitations table
+- no saved editor snapshots
+- no refresh token flow
 - no TURN server
-- no advanced reconnect/retry handling
-- no production-grade multi-peer support
+- no production deployment config
+- no serious automated test coverage
 
-3. Database remaining
-- no session table
-- no message table
-- no invitation table
-- no session history table
-
-Best short explanation of project maturity
-------------------------------------------
-This project already demonstrates the full core flow for a mentorship platform demo:
-- auth
+10. Best honest one-minute explanation
+--------------------------------------
+This project already demonstrates the full core demo flow of a mentor-student platform:
+- user auth
 - user listing
-- create/join room
-- meet-style session layout
+- room join by session id
 - realtime chat
-- shared editor
-- WebRTC signaling and media controls
+- shared code editor
+- browser-based video/audio call
 
-The main unfinished areas are persistence, advanced realtime hardening, and database expansion.
+The backend currently covers auth, user storage, websocket validation, and room relay.
+The frontend currently covers the full user experience and the browser-side WebRTC logic.
+The main unfinished work is persistence, database expansion, and production hardening.

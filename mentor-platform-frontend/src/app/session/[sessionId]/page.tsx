@@ -9,7 +9,15 @@ import {
 import Editor from "@monaco-editor/react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type SocketMessage = {
   type: "chat" | "signal" | "system" | "presence" | "editor";
@@ -57,6 +65,37 @@ function stopTracks(stream: MediaStream | null) {
   stream.getTracks().forEach((track) => track.stop());
 }
 
+function attachStreamToVideo(videoElement: HTMLVideoElement | null, stream: MediaStream | null) {
+  if (!videoElement) {
+    return;
+  }
+
+  videoElement.srcObject = stream;
+
+  if (!stream) {
+    return;
+  }
+
+  void videoElement.play().catch(() => undefined);
+}
+
+function normalizeParticipants(participants: Participant[]) {
+  const seenClientIds = new Set<string>();
+
+  return participants.filter((participant) => {
+    if (!participant?.email || !participant?.clientId || seenClientIds.has(participant.clientId)) {
+      return false;
+    }
+
+    seenClientIds.add(participant.clientId);
+    return true;
+  });
+}
+
+function isPresenceSystemMessage(text: string) {
+  return /has joined|has left|joined the session|left the session/i.test(text);
+}
+
 function createWebSocketUrl(sessionId: string, token: string) {
   const base = process.env.NEXT_PUBLIC_WS_BASE_URL ?? "ws://localhost:8080";
   const url = new URL("/ws/session", base);
@@ -89,6 +128,10 @@ export default function SessionPage() {
   const ignoreOfferRef = useRef(false);
   const settingRemoteAnswerPendingRef = useRef(false);
   const editorSyncPauseRef = useRef<number | null>(null);
+  const participantsRef = useRef<Participant[]>([]);
+  const participantCountRef = useRef(0);
+  const previousParticipantCountRef = useRef(0);
+  const isStartingMediaRef = useRef(false);
 
   const [socketState, setSocketState] = useState<"idle" | "connecting" | "open" | "closed" | "error">("idle");
   const [socketError, setSocketError] = useState("");
@@ -132,8 +175,24 @@ export default function SessionPage() {
     typeof window === "undefined" ? "" : `${window.location.origin}/session/${sessionId}`;
 
   const addMessage = useCallback((message: ChatMessage) => {
-    setMessages((currentMessages) => [...currentMessages, message]);
+    setMessages((currentMessages) => {
+      if (currentMessages.some((currentMessage) => currentMessage.id === message.id)) {
+        return currentMessages;
+      }
+
+      return [...currentMessages, message];
+    });
   }, []);
+
+  const addSystemMessage = useCallback((id: string, text: string) => {
+    addMessage({
+      id,
+      sender: "System",
+      role: "SYSTEM",
+      text,
+      timestamp: new Date().toISOString(),
+    });
+  }, [addMessage]);
 
   const sendSocketMessage = useCallback(
     (message: Omit<SocketMessage, "sender" | "role" | "timestamp">) => {
@@ -156,6 +215,20 @@ export default function SessionPage() {
     [currentEmail, currentRole],
   );
 
+  const resetPeerConnection = useCallback((nextPeerState?: string) => {
+    remoteStreamRef.current = null;
+    attachStreamToVideo(remoteVideoRef.current, null);
+
+    peerConnectionRef.current?.close();
+    peerConnectionRef.current = null;
+    makingOfferRef.current = false;
+    ignoreOfferRef.current = false;
+    settingRemoteAnswerPendingRef.current = false;
+
+    setHasRemoteStream(false);
+    setPeerState(nextPeerState ?? "Waiting for another participant");
+  }, []);
+
   const ensurePeerConnection = useCallback(() => {
     if (peerConnectionRef.current) {
       return peerConnectionRef.current;
@@ -166,7 +239,7 @@ export default function SessionPage() {
     });
 
     connection.onicecandidate = (event) => {
-      if (!event.candidate) {
+      if (peerConnectionRef.current !== connection || !event.candidate) {
         return;
       }
 
@@ -179,29 +252,49 @@ export default function SessionPage() {
     };
 
     connection.ontrack = (event) => {
-      const [stream] = event.streams;
-
-      if (!stream) {
+      if (peerConnectionRef.current !== connection) {
         return;
       }
 
-      remoteStreamRef.current = stream;
+      const [stream] = event.streams;
+      const activeRemoteStream = stream ?? remoteStreamRef.current ?? new MediaStream();
 
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = stream;
+      if (!stream) {
+        activeRemoteStream.addTrack(event.track);
       }
+
+      remoteStreamRef.current = activeRemoteStream;
+      attachStreamToVideo(remoteVideoRef.current, activeRemoteStream);
 
       setHasRemoteStream(true);
       setPeerState("Connected");
     };
 
     connection.onconnectionstatechange = () => {
-      if (connection.connectionState) {
-        setPeerState(connection.connectionState);
+      if (peerConnectionRef.current !== connection || !connection.connectionState) {
+        return;
       }
+
+      if (connection.connectionState === "failed") {
+        resetPeerConnection(
+          participantCountRef.current > 1 ? "Reconnecting" : "Waiting for another participant",
+        );
+        return;
+      }
+
+      if (connection.connectionState === "disconnected" && participantCountRef.current > 1) {
+        setPeerState("Reconnecting");
+        return;
+      }
+
+      setPeerState(connection.connectionState === "connected" ? "Connected" : connection.connectionState);
     };
 
     connection.onnegotiationneeded = async () => {
+      if (peerConnectionRef.current !== connection || participantCountRef.current < 2) {
+        return;
+      }
+
       try {
         makingOfferRef.current = true;
         await connection.setLocalDescription();
@@ -231,7 +324,7 @@ export default function SessionPage() {
 
     peerConnectionRef.current = connection;
     return connection;
-  }, [sendSocketMessage, sessionId]);
+  }, [resetPeerConnection, sendSocketMessage, sessionId]);
 
   const syncOutgoingTracks = useCallback(
     (stream: MediaStream) => {
@@ -260,10 +353,11 @@ export default function SessionPage() {
       return;
     }
 
-    if (mediaState === "requesting") {
+    if (isStartingMediaRef.current) {
       return;
     }
 
+    isStartingMediaRef.current = true;
     setMediaState("requesting");
     setMediaError("");
 
@@ -281,23 +375,22 @@ export default function SessionPage() {
 
       stopTracks(localStreamRef.current);
       localStreamRef.current = stream;
-
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
+      attachStreamToVideo(localVideoRef.current, stream);
 
       syncOutgoingTracks(stream);
       setMediaState("ready");
       setIsMicEnabled(true);
       setIsCameraEnabled(true);
-      setPeerState(participantCount > 1 ? "Negotiating" : "Waiting for another participant");
+      setPeerState(participantCountRef.current > 1 ? "Connecting" : "Waiting for another participant");
     } catch (error) {
       setMediaState("error");
       setMediaError(
         error instanceof Error ? error.message : "Unable to access camera and microphone.",
       );
+    } finally {
+      isStartingMediaRef.current = false;
     }
-  }, [mediaState, participantCount, syncOutgoingTracks]);
+  }, [syncOutgoingTracks]);
 
   const leaveMedia = useCallback(() => {
     stopTracks(screenStreamRef.current);
@@ -308,28 +401,16 @@ export default function SessionPage() {
     localStreamRef.current = null;
     remoteStreamRef.current = null;
 
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
+    attachStreamToVideo(localVideoRef.current, null);
+    resetPeerConnection("Waiting for another participant");
 
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
-
-    peerConnectionRef.current?.close();
-    peerConnectionRef.current = null;
-    makingOfferRef.current = false;
-    ignoreOfferRef.current = false;
-    settingRemoteAnswerPendingRef.current = false;
-
-    setHasRemoteStream(false);
     setIsMicEnabled(true);
     setIsCameraEnabled(true);
     setIsSharingScreen(false);
     setMediaError("");
     setMediaState("idle");
     setPeerState("Waiting for another participant");
-  }, []);
+  }, [resetPeerConnection]);
 
   const handleSignalPayload = useCallback(
     async (payload: unknown) => {
@@ -356,6 +437,10 @@ export default function SessionPage() {
 
           if (ignoreOfferRef.current) {
             return;
+          }
+
+          if (offerCollision && signalPayload.description.type === "offer") {
+            await connection.setLocalDescription({ type: "rollback" });
           }
 
           settingRemoteAnswerPendingRef.current =
@@ -397,10 +482,12 @@ export default function SessionPage() {
         }
       } catch (error) {
         console.error("Signal handling failed", error);
-        setPeerState("Reconnecting");
+        resetPeerConnection(
+          participantCountRef.current > 1 ? "Reconnecting" : "Waiting for another participant",
+        );
       }
     },
-    [ensurePeerConnection, sendSocketMessage, sessionId, shouldBePolite, startMedia],
+    [ensurePeerConnection, resetPeerConnection, sendSocketMessage, sessionId, shouldBePolite, startMedia],
   );
 
   const toggleTrack = useCallback((kind: "audio" | "video") => {
@@ -449,9 +536,7 @@ export default function SessionPage() {
       screenStreamRef.current = null;
       setIsSharingScreen(false);
 
-      if (localVideoRef.current && localStreamRef.current) {
-        localVideoRef.current.srcObject = localStreamRef.current;
-      }
+      attachStreamToVideo(localVideoRef.current, localStreamRef.current);
 
       return;
     }
@@ -474,9 +559,7 @@ export default function SessionPage() {
         connection.addTrack(displayTrack, displayStream);
       }
 
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = displayStream;
-      }
+      attachStreamToVideo(localVideoRef.current, displayStream);
 
       displayTrack.onended = () => {
         const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
@@ -492,9 +575,7 @@ export default function SessionPage() {
         screenStreamRef.current = null;
         setIsSharingScreen(false);
 
-        if (localVideoRef.current && localStreamRef.current) {
-          localVideoRef.current.srcObject = localStreamRef.current;
-        }
+        attachStreamToVideo(localVideoRef.current, localStreamRef.current);
       };
 
       setIsSharingScreen(true);
@@ -569,6 +650,113 @@ export default function SessionPage() {
     }
   };
 
+  const handleSocketMessage = useEffectEvent((event: MessageEvent<string>) => {
+    let message: SocketMessage;
+
+    try {
+      message = JSON.parse(event.data) as SocketMessage;
+    } catch {
+      return;
+    }
+
+    if (message.type === "presence") {
+      const payload = message.payload as { participants?: Participant[] } | null;
+      const nextParticipants = normalizeParticipants(payload?.participants ?? []);
+      const previousParticipants = participantsRef.current;
+      const previousParticipantIds = new Set(
+        previousParticipants.map((participant) => participant.clientId),
+      );
+      const nextParticipantIds = new Set(nextParticipants.map((participant) => participant.clientId));
+
+      participantsRef.current = nextParticipants;
+      participantCountRef.current = nextParticipants.length;
+      setParticipants(nextParticipants);
+
+      nextParticipants
+        .filter(
+          (participant) =>
+            participant.clientId !== clientIdRef.current
+            && !previousParticipantIds.has(participant.clientId),
+        )
+        .forEach((participant) => {
+          addSystemMessage(
+            `presence-join-${participant.clientId}`,
+            `${participant.email} has joined the session.`,
+          );
+        });
+
+      previousParticipants
+        .filter(
+          (participant) =>
+            participant.clientId !== clientIdRef.current
+            && !nextParticipantIds.has(participant.clientId),
+        )
+        .forEach((participant) => {
+          addSystemMessage(
+            `presence-left-${participant.clientId}-${message.timestamp}`,
+            `${participant.email} has left the session.`,
+          );
+        });
+
+      return;
+    }
+
+    if (message.type === "signal") {
+      if (message.clientId === clientIdRef.current) {
+        return;
+      }
+
+      void handleSignalPayload(message.payload);
+      return;
+    }
+
+    if (message.type === "editor") {
+      if (message.clientId === clientIdRef.current) {
+        return;
+      }
+
+      const payload = message.payload as { language?: EditorLanguage; code?: string } | null;
+
+      if (!payload?.language || typeof payload.code !== "string") {
+        return;
+      }
+
+      if (editorSyncPauseRef.current) {
+        window.clearTimeout(editorSyncPauseRef.current);
+      }
+
+      setIsEditorSyncPaused(true);
+      setEditorLanguage(payload.language);
+      setEditorCode(payload.code);
+      setEditorOwner(message.sender);
+
+      editorSyncPauseRef.current = window.setTimeout(() => {
+        setIsEditorSyncPaused(false);
+      }, 250);
+      return;
+    }
+
+    if (!message.content) {
+      return;
+    }
+
+    if (message.type === "chat" && message.clientId === clientIdRef.current) {
+      return;
+    }
+
+    if (message.type === "system" && isPresenceSystemMessage(message.content)) {
+      return;
+    }
+
+    addMessage({
+      id: `${message.timestamp}-${message.sender}-${message.type}`,
+      sender: message.sender,
+      role: message.role,
+      text: message.content,
+      timestamp: message.timestamp,
+    });
+  });
+
   useEffect(() => {
     if (!token) {
       router.replace("/login");
@@ -587,83 +775,47 @@ export default function SessionPage() {
     socketRef.current = socket;
 
     socket.onopen = () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
+
       setSocketState("open");
       setSocketError("");
     };
 
     socket.onmessage = (event) => {
-      const message = JSON.parse(event.data) as SocketMessage;
-
-      if (message.type === "presence") {
-        const payload = message.payload as { participants?: Participant[] } | null;
-        setParticipants(payload?.participants ?? []);
-        return;
-      }
-
-      if (message.type === "signal") {
-        if (message.clientId === clientIdRef.current) {
-          return;
-        }
-
-        void handleSignalPayload(message.payload);
-        return;
-      }
-
-      if (message.type === "editor") {
-        if (message.clientId === clientIdRef.current) {
-          return;
-        }
-
-        const payload = message.payload as { language?: EditorLanguage; code?: string } | null;
-
-        if (!payload?.language || typeof payload.code !== "string") {
-          return;
-        }
-
-        if (editorSyncPauseRef.current) {
-          window.clearTimeout(editorSyncPauseRef.current);
-        }
-
-        setIsEditorSyncPaused(true);
-        setEditorLanguage(payload.language);
-        setEditorCode(payload.code);
-        setEditorOwner(message.sender);
-
-        editorSyncPauseRef.current = window.setTimeout(() => {
-          setIsEditorSyncPaused(false);
-        }, 250);
-        return;
-      }
-
-      if (message.content) {
-        if (message.type === "chat" && message.clientId === clientIdRef.current) {
-          return;
-        }
-
-        addMessage({
-          id: `${message.timestamp}-${message.sender}-${message.type}`,
-          sender: message.sender,
-          role: message.role,
-          text: message.content,
-          timestamp: message.timestamp,
-        });
-      }
+      handleSocketMessage(event);
     };
 
     socket.onerror = () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
+
       setSocketState("error");
       setSocketError("Unable to connect to the realtime session server.");
     };
 
     socket.onclose = () => {
+      if (socketRef.current !== socket) {
+        return;
+      }
+
       setSocketState("closed");
+      participantsRef.current = [];
+      participantCountRef.current = 0;
+      previousParticipantCountRef.current = 0;
+      setParticipants([]);
+      resetPeerConnection("Waiting for another participant");
     };
 
     return () => {
       socket.close();
-      socketRef.current = null;
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
     };
-  }, [addMessage, currentEmail, handleSignalPayload, sessionId, token]);
+  }, [resetPeerConnection, sessionId, token]);
 
   useEffect(() => {
     if (isEditorSyncPaused || socketState !== "open") {
@@ -688,6 +840,47 @@ export default function SessionPage() {
   }, [editorCode, editorLanguage, isEditorSyncPaused, sendSocketMessage, sessionId, socketState]);
 
   useEffect(() => {
+    participantsRef.current = participants;
+    participantCountRef.current = participants.length;
+  }, [participants]);
+
+  useEffect(() => {
+    const previousParticipantCount = previousParticipantCountRef.current;
+
+    if (participantCount > 1 && previousParticipantCount < 2 && mediaState === "idle") {
+      void startMedia();
+    }
+
+    previousParticipantCountRef.current = participantCount;
+  }, [mediaState, participantCount, startMedia]);
+
+  useEffect(() => {
+    if (participantCount < 2) {
+      if (peerConnectionRef.current || hasRemoteStream) {
+        resetPeerConnection("Waiting for another participant");
+      } else {
+        setPeerState("Waiting for another participant");
+      }
+
+      return;
+    }
+
+    if (mediaState === "ready" && !hasRemoteStream) {
+      setPeerState("Connecting");
+      return;
+    }
+
+    if (mediaState === "error") {
+      setPeerState("Media permission needed");
+      return;
+    }
+
+    if (mediaState !== "ready") {
+      setPeerState("Participant joined");
+    }
+  }, [hasRemoteStream, mediaState, participantCount, resetPeerConnection]);
+
+  useEffect(() => {
     if (
       socketState !== "open"
       || mediaState !== "ready"
@@ -706,14 +899,16 @@ export default function SessionPage() {
       sortedParticipants[0] !== clientIdRef.current
       || makingOfferRef.current
       || connection.signalingState !== "stable"
-      || connection.localDescription
+      || connection.remoteDescription
     ) {
       return;
     }
 
-    void connection
-      .setLocalDescription()
-      .then(() => {
+    void (async () => {
+      try {
+        makingOfferRef.current = true;
+        await connection.setLocalDescription();
+
         if (!connection.localDescription) {
           return;
         }
@@ -724,10 +919,12 @@ export default function SessionPage() {
           content: null,
           payload: { description: connection.localDescription },
         });
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error("Initial offer failed", error);
-      });
+      } finally {
+        makingOfferRef.current = false;
+      }
+    })();
   }, [currentEmail, ensurePeerConnection, mediaState, participantCount, participants, sendSocketMessage, sessionId, socketState]);
 
   useEffect(() => {
@@ -741,9 +938,9 @@ export default function SessionPage() {
   }, [leaveMedia]);
 
   return (
-    <main className="min-h-screen bg-[#0b0c0e] px-3 py-3 text-white sm:px-4">
-      <section className="mx-auto flex min-h-[calc(100vh-1.5rem)] w-full max-w-[1560px] flex-col rounded-[18px] border border-white/10 bg-[#131416] p-3 shadow-[0_28px_80px_rgba(0,0,0,0.4)]">
-        <header className="flex flex-col gap-4 border-b border-white/10 px-2 pb-4 lg:flex-row lg:items-center lg:justify-between">
+    <main className="h-[100dvh] overflow-hidden bg-[#0b0c0e] px-3 py-3 text-white sm:px-4">
+      <section className="mx-auto flex h-full min-h-0 w-full max-w-[1560px] flex-col overflow-hidden rounded-[18px] border border-white/10 bg-[#131416] p-3 shadow-[0_28px_80px_rgba(0,0,0,0.4)]">
+        <header className="shrink-0 flex flex-col gap-4 border-b border-white/10 px-2 pb-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.26em] text-white/45">MentorSync session</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -785,8 +982,8 @@ export default function SessionPage() {
           </div>
         </header>
 
-        <div className="mt-4 grid flex-1 gap-4 xl:grid-cols-[1.72fr_0.98fr]">
-          <section className="flex min-h-[620px] flex-col rounded-[12px] border border-white/12 bg-[#0f1012] p-3">
+        <div className="mt-4 grid min-h-0 flex-1 gap-4 xl:grid-cols-[1.72fr_0.98fr]">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-white/12 bg-[#0f1012] p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.26em] text-white/40">Video call</p>
@@ -808,12 +1005,12 @@ export default function SessionPage() {
               </div>
             </div>
 
-            <div className="relative mt-4 flex-1 overflow-hidden rounded-[8px] border border-white/12 bg-[#090a0c]">
+            <div className="relative mt-4 min-h-0 flex-1 overflow-hidden rounded-[8px] border border-white/12 bg-[#090a0c]">
               <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                className={`h-full min-h-[560px] w-full object-cover ${hasRemoteStream ? "block" : "hidden"}`}
+                className={`h-full w-full object-cover ${hasRemoteStream ? "block" : "hidden"}`}
               />
 
               {hasRemoteStream ? null : (
@@ -826,7 +1023,7 @@ export default function SessionPage() {
                   </p>
                   <p className="mt-2 max-w-md text-sm leading-7 text-white/55">
                     {participantCount > 1
-                      ? "Start camera and mic on both sides to begin WebRTC negotiation."
+                      ? "The other participant is here. Allow camera and microphone access and the call will connect in this panel."
                       : "Share the session link and ask the other participant to join this same room."}
                   </p>
                 </div>
@@ -863,7 +1060,7 @@ export default function SessionPage() {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="mt-4 shrink-0 flex flex-wrap items-center gap-3">
               <button
                 onClick={() => {
                   void startMedia();
@@ -917,8 +1114,8 @@ export default function SessionPage() {
             ) : null}
           </section>
 
-          <aside className="grid gap-4 xl:grid-rows-[1fr_0.88fr]">
-            <section className="flex min-h-[320px] flex-col rounded-[12px] border border-white/12 bg-[#0f1012] p-3">
+          <aside className="grid min-h-0 gap-4 xl:grid-rows-[minmax(0,1fr)_minmax(0,0.88fr)]">
+            <section className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-white/12 bg-[#0f1012] p-3">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.26em] text-white/40">Code editor</p>
@@ -956,7 +1153,7 @@ export default function SessionPage() {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-1 flex-col overflow-hidden rounded-[8px] border border-white/12 bg-[#08090b]">
+              <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] border border-white/12 bg-[#08090b]">
                 <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 text-xs text-white/45">
                   <div className="flex items-center gap-2">
                     {["#ef4444", "#f59e0b", "#10b981"].map((color) => (
@@ -969,7 +1166,7 @@ export default function SessionPage() {
                   </div>
                   <span>Last synced by {editorOwner}</span>
                 </div>
-                <div className="min-h-[320px] flex-1">
+                <div className="min-h-0 flex-1">
                   <Editor
                     height="100%"
                     defaultLanguage="javascript"
@@ -993,7 +1190,7 @@ export default function SessionPage() {
               </div>
             </section>
 
-            <section className="flex min-h-[280px] flex-col rounded-[12px] border border-white/12 bg-[#0f1012] p-3">
+            <section className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-white/12 bg-[#0f1012] p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.26em] text-white/40">Messages</p>
@@ -1004,7 +1201,7 @@ export default function SessionPage() {
                 </span>
               </div>
 
-              <div className="mt-4 flex-1 space-y-3 overflow-auto rounded-[8px] border border-white/12 bg-[#08090b] p-4">
+              <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-auto rounded-[8px] border border-white/12 bg-[#08090b] p-4">
                 {messages.map((message) => (
                   <div
                     key={message.id}
@@ -1021,7 +1218,7 @@ export default function SessionPage() {
                 ))}
               </div>
 
-              <div className="mt-4 flex gap-3">
+              <div className="mt-4 shrink-0 flex gap-3">
                 <input
                   value={draftMessage}
                   onChange={(event) => setDraftMessage(event.target.value)}

@@ -1,147 +1,78 @@
 Frontend Status Summary
-Date: 2026-03-30
+Date: 2026-03-31
 Project: MentorSync / 1-on-1 Mentor-Student Platform
 Status Folder: C:\Users\tanay\Desktop\Internship\Status
 Frontend Repo: C:\Users\tanay\Desktop\Internship\mentor-platform-frontend
 Backend Repo: C:\Users\tanay\Desktop\Internship\mentor-platform\mentor-platform
 
-Reviewed scope
-- PDFs in the Internship folder
-- Notes
-- mentorApp.drawio.png
-- current frontend codebase
-- current backend codebase
+Frontend files reviewed
+- `src/app/layout.tsx`
+- `src/app/globals.css`
+- `src/app/page.tsx`
+- `src/app/login/page.tsx`
+- `src/app/register/page.tsx`
+- `src/app/dashboard/page.tsx`
+- `src/app/session/[sessionId]/page.tsx`
+- `src/lib/api.ts`
+- `src/lib/auth.ts`
 
-Frontend currently implemented
-1. Routing and pages
-- `/`
-- `/login`
-- `/register`
-- `/dashboard`
-- `/session/[sessionId]`
+Current frontend implementation
+1. App shell and styling
+- `layout.tsx` provides the root HTML/body shell.
+- `globals.css` defines the visual theme, colors, and shared CSS variables.
+- `page.tsx` is the landing page that routes users to register or login.
 
-2. Auth flow
-- register and login UI exist
-- JWT token is stored in `localStorage`
-- protected frontend pages redirect to `/login` when token is missing
-- helper logic is centralized in `src/lib/auth.ts`
+2. Auth UI and token usage
+- `register/page.tsx` sends email, password, and role to the backend.
+- `login/page.tsx` sends credentials and stores the returned JWT in `localStorage`.
+- `src/lib/auth.ts` decodes token payloads, extracts email, clears the token, and generates 6-character session ids.
+- The helper can also read role claims if a JWT contains them, but the current backend token only stores the email subject.
 
-3. Dashboard
-- `Create Session` generates a 6-character session id and routes to `/session/[sessionId]`
-- `Join Session` opens an existing session id in the same tab
-- dashboard loads `GET /api/users` for authenticated users
-- signed-in email and role are shown from the decoded token
+3. Backend API integration
+- `src/lib/api.ts` centralizes `registerUser`, `loginUser`, and `getUsers`.
+- The REST base URL is driven by `NEXT_PUBLIC_API_BASE_URL` and falls back to `http://localhost:8080`.
+- `getUsers` sends the stored JWT as a Bearer token.
 
-4. Session page layout
-- layout follows the `mentorApp.drawio.png` reference closely
-- left side: video/call area
-- right top: Monaco editor
-- right bottom: chat
+4. Dashboard flow
+- `dashboard/page.tsx` protects the page by checking for a stored token.
+- It fetches `/api/users` after login and renders the returned users.
+- It can create a fresh session id or route into an existing `/session/[sessionId]`.
+- The dashboard reads the current email from the JWT; current role display is only available if the JWT includes role data.
 
-5. Realtime socket layer
-- frontend connects to `ws://localhost:8080/ws/session`
-- query params sent:
-  - `sessionId`
-  - `token`
-  - `clientId`
-- socket handles:
-  - presence
-  - system messages
-  - chat
-  - editor sync
-  - WebRTC signaling
+5. Session room flow
+- `session/[sessionId]/page.tsx` is the main realtime workspace.
+- It opens a websocket connection to `/ws/session` with `sessionId`, `token`, and a per-tab `clientId`.
+- The page shows local video, remote video, a shared editor, and realtime chat in a single layout.
 
 6. Chat
-- chat UI exists in the session page
-- sent messages are rendered immediately in the sender UI
-- same-tab websocket echoes are ignored to prevent duplicates
+- Chat messages are sent through the websocket as room events.
+- The local sender message is rendered immediately in the UI.
+- Same-client websocket echoes are ignored so messages do not duplicate.
 
 7. Shared editor
-- Monaco editor integrated
-- JavaScript and Python selection available
-- code sync is room-based over websocket
-- sync model is simple last-write-wins broadcast
+- Monaco Editor is integrated with JavaScript and Python options.
+- Editor updates are debounced and broadcast through the websocket as `editor` messages.
+- Sync is last-write-wins; there is no CRDT/OT conflict-resolution layer yet.
 
-8. Video/audio/screen share UI
-- local media starts with `getUserMedia`
-- mic toggle exists
-- camera toggle exists
-- screen sharing exists with `getDisplayMedia`
-- local preview and remote video area are both wired
+8. WebRTC and media
+- `startMedia()` requests camera and microphone access with `getUserMedia`.
+- `ensurePeerConnection()` creates the `RTCPeerConnection` and wires ICE, track, and negotiation handlers.
+- `handleSignalPayload()` applies offers, answers, and ICE candidates received through websocket messages.
+- `toggleTrack()` and `toggleScreenShare()` manage mic, camera, and screen-sharing behavior.
+- Current ICE config only uses a public STUN server.
 
-9. WebRTC signaling
-- `RTCPeerConnection` is set up in the session page
-- signaling messages exchanged through websocket:
-  - description offer/answer
-  - ICE candidates
-- negotiation ordering now uses a per-tab `clientId`, not just email
+9. Presence and signaling
+- Presence messages drive the participant list and join/leave system messages.
+- A per-tab `clientId` is used so multiple tabs from the same email do not confuse signaling logic.
+- The page logic is designed for 1-on-1 sessions, not a production multi-peer room.
 
-10. Backend support already in place for frontend
-- websocket endpoint exists
-- websocket handshake validates token and session id
-- websocket presence and relay logic exists
-- `/api/users` is now authenticated, not mentor-only
+Current frontend limits
+- No refresh token flow or Next.js middleware-based auth protection.
+- No persistent session API; session ids are client-generated only.
+- No stored message history or saved editor snapshots.
+- No device selector, reconnect UI, or advanced failure recovery.
+- No automated frontend tests in the repo.
 
-Frontend what is left
-1. Live call hardening
-- TURN server is not configured
-- call reconnect/retry flow is not implemented
-- production-grade renegotiation handling is still limited
-- remote call success still depends on live browser/network testing
-
-2. Editor upgrade
-- no cursor sync
-- no CRDT/Yjs or OT conflict handling
-- no run-code feature
-- no file tabs or persistence
-
-3. Chat polish
-- no persistent message history
-- no unread/read state
-- no attachments
-- no typing indicators
-
-4. Session product flow
-- no backend session creation API
-- no backend session join validation API
-- session ids are frontend-generated only
-- no persistent invitation/session state in the database
-
-5. Frontend auth hardening
-- no refresh token flow
-- no Next.js middleware-based protection
-- logout is local-token removal only
-
-6. UX polish
-- no loading skeletons for session route
-- no device-selection UI for mic/camera
-- no dedicated error recovery UI for failed socket/call states
-- no session history screen
-
-7. Frontend testing
-- no automated frontend tests are present
-- no end-to-end browser tests are present
-
-Backend-facing notes that affect frontend status
-- JWT currently stores email only, not role claims directly
-- role is looked up from DB during request filtering / websocket handshake
-- database model currently only supports users, not sessions/messages/invitations
-
-Verification completed during review
-- frontend structure reviewed fully
-- session page realtime logic reviewed fully
-- `npm run lint` passed earlier in the current state
-- `npm run build` passed earlier in the current state
-- backend compile passed earlier in the current state
-
-Overall frontend status
-- Core interview demo flow exists:
-  - auth
-  - dashboard
-  - users list
-  - create/join session
-  - meet-style room
-  - chat
-  - Monaco editor
-  - WebRTC signaling
-- Main remaining work is persistence, hardening, and production-readiness rather than first-pass UI wiring.
+Frontend maturity summary
+- The frontend is demo-ready for the core mentor/student flow.
+- The remaining work is mainly persistence, hardening, and production polish rather than missing first-pass screens.

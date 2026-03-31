@@ -1,26 +1,38 @@
 Project Status Board
-Date: 2026-03-30
-Folder: C:\Users\tanay\Desktop\Internship\Status
+Date: 2026-03-31
+Project: MentorSync / 1-on-1 Mentor-Student Platform
+Workspace: C:\Users\tanay\Desktop\Internship
 
-Spring Boot      █████████░ 90% 🚀
-Security/JWT     ████████░░ 80% 🔐
-Next.js          █████████░ 90% ⚡
-SQL              ████░░░░░░ 40% 🗄️
-Real-time        ███████░░░ 70% 🔄
-Deployment       ░░░░░░░░░░ 0% 🌐
-Core Java        ███████░░░ 70% ☕
+Overall status
+Spring Boot:   █████████░░  (90% 🚀)
+Security/JWT:  ████████░░░  (80% 🔐)
+Next.js:       █████████░░  (90% 💻)
+Real-time:     ███████░░░░  (75% ⚡)
+SQL:           ████░░░░░░  (40% 🗄️)
+Deployment:    ██░░░░░░░░  (20% 🌐)
+Core Java:     ████░░░░░░  (35%)
 
+What is working now
+- Users can register as `STUDENT` or `MENTOR`.
+- Login returns a JWT token and the frontend stores it in `localStorage`.
+- Authenticated users can open `/dashboard` and call `GET /api/users`.
+- Dashboard can create a new session id or join an existing session route.
+- `/session/[sessionId]` supports realtime presence, chat, shared Monaco editor sync, and browser media controls.
+- WebRTC signaling is relayed through the Spring WebSocket server.
 
-Current summary
-- Frontend core flow is present and demoable.
-- Backend auth/users/websocket flow is present.
-- Realtime room exists but still needs live-network hardening.
-- Database work is still narrow and mostly limited to users.
+Current architecture in one sentence
+- Frontend owns the pages, JWT storage, session UI, Monaco editor, browser media, and WebRTC peer logic; backend owns auth, JWT validation, the users API, websocket handshake validation, and room message relay; Oracle currently stores only users.
 
-Most important unfinished items
-- persistent sessions
-- persistent messages
-- invitation/session database model
-- TURN server and call hardening
-- frontend auth hardening
-- deployment
+What is only partially complete
+- Session ids are generated on the frontend and are not stored in the database.
+- Chat messages and editor state are not persisted.
+- WebRTC is tuned for a 1-on-1 demo flow and still depends on browser permissions, STUN, and network quality.
+- There is no TURN server, no refresh-token flow, and no production deployment setup.
+- Automated testing is still minimal.
+
+Highest-value next steps
+1. Add `sessions`, `messages`, and `session_invitations` tables/entities.
+2. Move session creation and join validation into backend APIs.
+3. Add TURN server support and stronger reconnect/recovery handling.
+4. Add migration tooling plus frontend/backend tests.
+5. Prepare production configuration and deployment.

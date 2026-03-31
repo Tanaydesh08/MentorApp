@@ -1,84 +1,70 @@
 SQL Status Summary
-Date: 2026-03-30
+Date: 2026-03-31
 Status Folder: C:\Users\tanay\Desktop\Internship\Status
 Backend Repo: C:\Users\tanay\Desktop\Internship\mentor-platform\mentor-platform
 
-Current SQL/database work implemented
-1. Database connection exists
-- Oracle DB is configured in `application.properties`.
-- JPA is enabled.
-- Hibernate DDL is set to `update`.
+Current database implementation
+1. Connection and ORM
+- `application.properties` points Spring Boot to Oracle at `jdbc:oracle:thin:@localhost:1521:XE`.
+- JPA is enabled and `spring.jpa.hibernate.ddl-auto=update` is active.
+- This means Hibernate is handling schema updates at runtime instead of a migration tool.
 
-2. Current entity/table coverage
-- `User` entity exists.
-- Expected current table: `users`
-- Current stored columns are effectively:
+2. Actual entity/table coverage
+- Only `entity/User.java` is mapped right now.
+- The current backend logic expects a `users` table with:
   - `id`
   - `email`
   - `password`
   - `role`
+- `UserRepository` only supports user lookups, mainly `findByEmail(...)` plus standard JPA methods.
 
-3. Current repository coverage
-- `UserRepository` exists.
-- Current query support is only for users.
+3. What the database is used for today
+- Registration inserts new users.
+- Passwords are BCrypt-hashed before save.
+- Login loads a user by email and checks the stored hash.
+- `GET /api/users` reads all stored users.
 
-What is left in SQL part
-1. Session data model is missing
+4. SQL script reality
+- `mentor-db.sql` is a manual scratchpad file, not a migration system.
+- It contains ad hoc selects, inserts, deletes, and a manual unique-email constraint statement.
+- The entity model itself does not declare `email` as unique in code.
+
+What is missing in SQL
+1. Session data model
 - no `sessions` table
 - no session owner/creator field
-- no start time / end time
-- no session status
-- no session code persistence
+- no start time, end time, or session status
+- no persistent session code storage
 
-2. Invitation model is missing
+2. Invitation data model
 - no `session_invitations` table
-- no invite sender / receiver
-- no accepted / rejected / pending status
-- no invite timestamps
+- no sender/receiver references
+- no pending/accepted/rejected state
+- no invitation timestamps
 
-3. Message persistence is missing
+3. Message persistence
 - no `messages` table
-- no sender reference
-- no session reference
-- no created-at timestamp
-- no message history retrieval
+- no sender/session foreign keys
+- no saved chat history
 
-4. Editor persistence is missing
-- no editor snapshots table
-- no room-based saved code state
-- no language persistence per session
+4. Editor persistence
+- no saved code snapshots per room
+- no stored selected language per session
+- no audit trail of editor changes
 
-5. Relationship design is missing
-- no foreign-key mapping from sessions to users
-- no foreign-key mapping from messages to sessions
-- no foreign-key mapping from invites to sessions/users
+5. Relationship and constraint design
+- no explicit foreign-key mapping between sessions and users
+- no indexing strategy for common lookups
+- no standard audit columns like `created_at` or `updated_at`
+- no role constraint/check in the entity model
 
-6. Constraints and data quality are incomplete
-- `email` should be unique at DB level if not already enforced
-- role values should be constrained to valid values
-- audit timestamps are not present
-- no indexing strategy is defined for lookup-heavy fields
-
-7. SQL migration discipline is missing
-- no explicit migration tool setup like Flyway/Liquibase
-- schema currently depends on Hibernate auto-update
-- no versioned migration history
-
-8. Reporting/history support is missing
-- no session history table/view
-- no mentor/student session tracking
-- no stored analytics or usage summaries
-
-Recommended next SQL order
-1. Make `users.email` unique and clean up constraints
-2. Add `sessions` table/entity
-3. Add `messages` table/entity
-4. Add `session_invitations` table/entity
-5. Add timestamps and foreign keys everywhere needed
-6. Introduce migration files instead of relying only on Hibernate update
+6. Migration discipline
+- no Flyway or Liquibase setup
+- no versioned SQL history
+- schema changes currently depend on runtime Hibernate behavior
 
 Honest SQL maturity summary
-- Database integration exists.
-- Authentication user storage exists.
-- Core product tables for sessions, messages, invitations, and history are still not implemented.
-- SQL is currently the most incomplete major area after deployment.
+- Oracle is connected and used.
+- User authentication storage exists.
+- The product data model for sessions, invites, messages, history, and reporting is still not implemented.
+- SQL is one of the least complete parts of the project today.

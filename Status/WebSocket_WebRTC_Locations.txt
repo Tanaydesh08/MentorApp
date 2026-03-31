@@ -1,0 +1,39 @@
+WebSocket and WebRTC implementation locations
+Date: 2026-03-31
+
+Backend websocket implementation
+--------------------------------
+1. `mentor-platform/mentor-platform/src/main/java/com/tanaydeshmukh/mentor_platform/websocket/WebSocketConfig.java`
+- Line 22: `registerWebSocketHandlers(...)`
+- Registers the `/ws/session` websocket endpoint
+
+2. `mentor-platform/mentor-platform/src/main/java/com/tanaydeshmukh/mentor_platform/websocket/SessionHandshakeInterceptor.java`
+- Line 28: `beforeHandshake(...)`
+- Reads `token`, `sessionId`, and `clientId` from query params
+- Validates the user and stores websocket session attributes like `email`, `role`, `sessionId`, and `clientId`
+
+3. `mentor-platform/mentor-platform/src/main/java/com/tanaydeshmukh/mentor_platform/websocket/SessionWebSocketHandler.java`
+- Line 29: `afterConnectionEstablished(...)`
+- Line 38: `handleTextMessage(...)`
+- Line 69: `afterConnectionClosed(...)`
+- This class manages room membership, presence, chat/editor broadcast, and signaling relay
+
+Frontend websocket and WebRTC implementation
+--------------------------------------------
+4. `mentor-platform-frontend/src/app/session/[sessionId]/page.tsx`
+- Line 99: `createWebSocketUrl(...)`
+- Line 197: `sendSocketMessage(...)`
+- Line 232: `ensurePeerConnection(...)`
+- Line 349: `startMedia(...)`
+- Line 415: `handleSignalPayload(...)`
+- Line 516: `toggleScreenShare(...)`
+- Line 653: `handleSocketMessage(...)`
+- Line 772: creates `new WebSocket(...)`
+- Line 826: broadcasts editor updates
+- Line 893: sends the initial WebRTC offer when the room is ready
+
+Important note
+--------------
+- There is no separate backend WebRTC engine in this project.
+- WebRTC media and peer-connection logic live in the frontend session page.
+- The backend websocket layer only validates the connection and relays signaling/room messages.
